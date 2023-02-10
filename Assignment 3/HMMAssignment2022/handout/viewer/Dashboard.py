@@ -417,4 +417,3 @@ class Dashboard:
                 display(plt.show())
 
 
-

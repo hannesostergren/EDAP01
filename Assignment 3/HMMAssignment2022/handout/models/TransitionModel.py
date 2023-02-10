@@ -89,4 +89,3 @@ class TransitionModel:
         plt.matshow(self.__matrix)
         plt.colorbar()
         plt.show()
-

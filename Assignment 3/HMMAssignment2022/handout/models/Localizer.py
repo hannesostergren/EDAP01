@@ -6,7 +6,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import random
-from typing import *
 
 from models import StateModel,TransitionModel,ObservationModel,RobotSimAndFilter
 
@@ -32,7 +31,7 @@ class Localizer:
         return self.__om
 
     # the current true pose (x, h, h) that should be kept in the local variable __trueState
-    def get_current_true_pose(self) -> Tuple[int, int, int]:
+    def get_current_true_pose(self) -> (int, int, int):
         x, y, h = self.__sm.state_to_pose(self.__trueState)
         return x, y, h
 
@@ -41,14 +40,14 @@ class Localizer:
         return self.__probs
 
     # the current sensor reading (as position in the grid). "Nothing" is expressed as None
-    def get_current_reading(self) -> Tuple[int, int]:
+    def get_current_reading(self) -> (int, int):
         ret = None
         if self.__sense != None:
             ret = self.__sm.reading_to_position(self.__sense)
-        return ret
+        return ret;
 
     # get the currently most likely position, based on single most probable pose
-    def most_likely_position(self) -> Tuple[int, int]:
+    def most_likely_position(self) -> (int, int):
         return self.__estimate
 
     ################################### Here you need to really fill in stuff! ##################################
@@ -60,6 +59,8 @@ class Localizer:
     def initialise(self):
         self.__trueState = random.randint(0, self.__sm.get_num_of_states() - 1)
         self.__sense = None
+        
+        
         self.__probs = np.ones(self.__sm.get_num_of_states()) / (self.__sm.get_num_of_states()) # replace with sensor vector
         self.__estimate = self.__sm.state_to_position(np.argmax(self.__probs))
         
@@ -97,54 +98,55 @@ class Localizer:
     
     def move_robot_and_update(self):
         x, y, h = self.__sm.state_to_pose(self.__trueState)
-        dims = self.__sm.get_grid_dimensions()
-        directions = [0, 1, 2, 3]
-        problist = [0, 0, 0, 0]
         
-        #Make sure the robot doesn't face the wall
+        dims = self.__sm.get_grid_dimensions()
+        headings = [0, 1, 2, 3]
         if x-1 < 0:
-            directions.remove(0)
+            headings.remove(0)
         if y+1 >= dims[0]:
-            directions.remove(1)
+            headings.remove(1)
         if x+1 >= dims[1]:
-            directions.remove(2)
+            headings.remove(2)
         if y-1 < 0:
-            directions.remove(3)
+            headings.remove(3)
             
-        #Find the probability of each new direction
-        for d in directions:
-            if d == 0:
-                newState = self.__sm.pose_to_state(x-1, y, d)
-            elif d == 1:
-                newState = self.__sm.pose_to_state(x, y+1, d)
-            elif d == 2:
-                newState = self.__sm.pose_to_state(x+1, y, d)
+        # Find the probability of each new heading
+        problist = [0, 0, 0, 0]
+        for H in headings:
+            if H == 0:
+                newState = self.__sm.pose_to_state(x-1, y, H)
+            elif H == 1:
+                newState = self.__sm.pose_to_state(x, y+1, H)
+            elif H == 2:
+                newState = self.__sm.pose_to_state(x+1, y, H)
             else:
-                newState = self.__sm.pose_to_state(x, y-1, d)
+                newState = self.__sm.pose_to_state(x, y-1, H)
             p = self.__tm.get_T_ij(self.__trueState,newState)
-            problist[d] = p
+            problist[H] = p
                
-        #Remove zero probabilities which screw up the algorithm
-        while len(directions) != len(problist):
+        while len(headings) != len(problist):
             for item in problist:
                 if item == 0:
                     problist.remove(0)
         
-        newDir = random.choices(directions, weights = problist)[0] #random choice with probability distribution "probList"
-        x, y, h = self.__rs.update_pos(newDir)
+        # Choose a new heading from the possible ones
+        new_head = random.choices(headings, weights = problist)[0]
+        x, y, h = self.__rs.update_pos(new_head)
         self.__trueState = self.__sm.pose_to_state(x,y,h)
         return x,y,h
     
+    
+    
     def get_sensor_reading(self):
-        possibilityDict = {}
-        possibleNewPos1 = [(-1,0),(-1,-1),(0,-1),(1,-1),(1,0),(1,1),(0,1),(-1,1)] #Squares around robot position
-        possibleNewPos2 = [(-2,0),(-2,-1),(-2,-2),(-1,-2),(0,-2),(1,-2),(2,-2),(2,-1),(2,0),(2,1),(2,2),(1,2),(0,2),(-1,2),(-2,2),(-2,1)] #squares around those squares
+        posibilityDict = {}
+        possibleNewPos1 = [(-1,0),(-1,-1),(0,-1),(1,-1),(1,0),(1,1),(0,1),(-1,1)]
+        possibleNewPos2 = [(-2,0),(-2,-1),(-2,-2),(-1,-2),(0,-2),(1,-2),(2,-2),(2,-1),(2,0),(2,1),(2,2),(1,2),(0,2),(-1,2),(-2,2),(-2,1)]
         n_Ls = 1
         n_Ls_2 = 1
         readingTrueState = self.__sm.state_to_reading(self.__trueState)
-        possibilityDict[readingTrueState] = self.__om.get_o_reading_state(readingTrueState,self.__trueState)
+        posibilityDict[readingTrueState] = self.__om.get_o_reading_state(readingTrueState,self.__trueState)
         
-        #iterate through surrounding squares
+        
         for move in possibleNewPos1:
             currPos = self.__sm.state_to_position(self.__trueState)
             newPosX = currPos[0] + move[0]
@@ -153,11 +155,10 @@ class Localizer:
             readingState = self.__sm.position_to_reading(newPosX,newPosY)
             if readingState < self.__om.get_nr_of_readings()-1 and readingState>0:
                 p = self.__om.get_o_reading_state(readingState, self.__trueState)
-                possibilityDict[readingState] = p
+                posibilityDict[readingState] = p
                 if p != 0:
                     n_Ls += 1
 
-        #iterate through surrounding squares
         for move in possibleNewPos2:
             currPos = self.__sm.state_to_position(self.__trueState)
             newPosX = currPos[0] + move[0]
@@ -165,53 +166,48 @@ class Localizer:
             readingState = self.__sm.position_to_reading(newPosX,newPosY)
             if readingState < self.__om.get_nr_of_readings()-1 and readingState>0:
                 p = self.__om.get_o_reading_state(readingState, self.__trueState)
-                possibilityDict[readingState] = p
+                posibilityDict[readingState] = p
                 if p != 0:
                     n_Ls_2 += 1                
         
-        #value of nothing according to instructions
         nothing = 1-0.1-n_Ls*0.05-n_Ls_2*0.025
-        possibilityDict[None] = nothing
-        return possibilityDict
-
-
-    def update(self) -> Tuple[bool, int, int, int, int, int, int, int, int, int]:
+        posibilityDict[None] = nothing
+        return posibilityDict
+    
+    def update(self) -> (bool, int, int, int, int, int, int, int, int, np.array(1)) :
         # update all the values to something sensible instead of just reading the old values...
         # 
         # this block can be kept as is
         
-        #Move robot, update sensor reading for new state
         newX,newY,newH = self.move_robot_and_update()
         sensor_reading_dict = self.get_sensor_reading()
         tsX, tsY, tsH = newX,newY,newH
         
-        #Fill all squares with their respective sensor reading
         allsquares = np.zeros(len(self.__probs))
         allsquares[0] = sensor_reading_dict[None]
         for i in range(len(allsquares)):
             if i in list(sensor_reading_dict.keys()):
                 allsquares[i] = sensor_reading_dict[i]
         
-        #Choose which square to walk to next according to probability
+        
         sens_choice = random.choices(np.arange(len(allsquares)), weights = allsquares)[0]
         if sens_choice == 0:
             self.__sense = None
         else:
             self.__sense = sens_choice
-
-        #Forward filter based on previous choice
+        print(self.__sense)
         T_transp = self.__tm.get_T_transp()
         self.__probs, best_state = self.__HMM.forward_filter(self.__sense, T_transp, self.__probs)
-        self.__probs = random.choice(self.__probs)
         self.__estimate = self.__sm.state_to_position(best_state)
         
-        #error
+        
         eX, eY = self.__estimate
         
         if self.__sense != None:
             srX, srY = self.__sm.reading_to_position(self.__sense)
             ret = True
-            if tsX == eX and tsY == eY:
+            
+            if tsX == eX and tsY == eY :
                 self.__correctEstimates += 1
                 self.__dist.append(0)
             else:
@@ -225,6 +221,12 @@ class Localizer:
             srY = -1
             ret = False
             
+        
+        
+        # this should be updated to spit out the actual error for this step
+        #error = self.__dist[-1]      
+        
+        #hit_rate = self.__correctEstimates/(len(self.__dist))
         error = abs(eY - tsY) + abs(eX - tsX)
 
         return ret, tsX, tsY, tsH, srX, srY, eX, eY, error, self.__probs
